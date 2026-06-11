@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – CrewAI Job Agent{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Agent Dashboard</h1>
+    <p class="page-subtitle">Human-in-the-Loop Proposal Review</p>
+  </div>
+  <div class="header-stats">
+    <div class="stat-badge stat-pending">{{ pending|length }} Pending</div>
+    <div class="stat-badge stat-approved">{{ approved|length }} Approved</div>
+    <div class="stat-badge stat-rejected">{{ rejected|length }} Rejected</div>
+  </div>
+</div>
+
+<!-- Run Panel -->
+<div class="card run-card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <span class="card-icon">🤖</span> Dispatch Agents
+    </h2>
+    <div class="agent-status {% if crew_status.running %}status-running{% else %}status-idle{% endif %}">
+      <span class="status-dot"></span>
+      {% if crew_status.running %}Running…{% else %}Idle{% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="agent-pipeline">
+      <div class="agent-node">
+        <div class="agent-avatar scout">🔍</div>
+        <span class="agent-name">Scout</span>
+        <span class="agent-role">Finds Jobs</span>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="agent-node">
+        <div class="agent-avatar analyst">📊</div>
+        <span class="agent-name">Analyst</span>
+        <span class="agent-role">Scores & Ranks</span>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="agent-node">
+        <div class="agent-avatar writer">✍️</div>
+        <span class="agent-name">Writer</span>
+        <span class="agent-role">Writes Proposals</span>
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('run_crew') }}" class="run-form">
+      <div class="run-form-row">
+        <div class="field-group flex-1">
+          <label for="keywords" class="field-label">Search Keywords</label>
+          <input
+            type="text"
+            id="keywords"
+            name="keywords"
+            class="field-input"
+            value="AI automation freelance Python"
+            placeholder="e.g. AI automation freelance Python"
+            maxlength="300"
+            {% if crew_status.running %}disabled{% endif %}
+          />
+        </div>
+        <button
+          type="submit"
+          class="btn btn-primary btn-run"
+          {% if crew_status.running %}disabled{% endif %}
+        >
+          {% if crew_status.running %}
+            <span class="spinner"></span> Agents Running…
+          {% else %}
+            ⚡ Run Agents
+          {% endif %}
+        </button>
+      </div>
+    </form>
+
+    {% if crew_status.last_error %}
+    <div class="error-box">
+      <strong>Last run error:</strong> {{ crew_status.last_error }}
+    </div>
+    {% endif %}
+    {% if crew_status.last_run %}
+    <p class="last-run-time">Last run: {{ crew_status.last_run }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Pending Proposals -->
+<section class="proposals-section">
+  <h2 class="section-title">
+    <span>Pending Review</span>
+    <span class="section-count">{{ pending|length }}</span>
+  </h2>
+  {% if pending %}
+    <div class="proposals-grid">
+      {% for proposal in pending %}
+      <div class="proposal-card pending">
+        <div class="proposal-header">
+          <div class="proposal-meta">
+            <span class="proposal-company">{{ proposal.company | default('Unknown') }}</span>
+            {% if proposal.job_score %}
+            <span class="score-badge">Score: {{ proposal.job_score }}/100</span>
+            {% endif %}
+          </div>
+          <h3 class="proposal-title">{{ proposal.job_title | default('Untitled') }}</h3>
+          {% if proposal.price_range %}
+          <div class="proposal-details-row">
+            <span class="detail-chip">💰 {{ proposal.price_range }}</span>
+            {% if proposal.timeline %}
+            <span class="detail-chip">⏱ {{ proposal.timeline }}</span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="proposal-body">
+          <p class="proposal-text">{{ proposal.proposal_text | default('No proposal text.') }}</p>
+          {% if proposal.key_skills_highlighted %}
+          <div class="skills-row">
+            {% for skill in proposal.key_skills_highlighted[:5] %}
+            <span class="skill-tag">{{ skill }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if proposal.job_url and proposal.job_url != '#' %}
+          <a href="{{ proposal.job_url }}" target="_blank" rel="noopener noreferrer" class="job-link">
+            View Original Job →
+          </a>
+          {% endif %}
+        </div>
+
+        <div class="proposal-actions">
+          <form method="POST" action="{{ url_for('approve_proposal', proposal_id=proposal.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-approve">✓ Approve</button>
+          </form>
+          <form method="POST" action="{{ url_for('reject_proposal', proposal_id=proposal.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-reject">✗ Reject</button>
+          </form>
+          <form method="POST" action="{{ url_for('delete_proposal', proposal_id=proposal.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-delete" onclick="return confirm('Delete this proposal?')">🗑</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">📭</div>
+      <p class="empty-text">No pending proposals. Run the agents to generate new ones.</p>
+    </div>
+  {% endif %}
+</section>
+
+<!-- Recent Approved/Rejected Summary -->
+{% if approved or rejected %}
+<section class="proposals-section">
+  <h2 class="section-title">
+    <span>Recent Decisions</span>
+    <a href="{{ url_for('approved_proposals') }}" class="section-link">View all approved →</a>
+  </h2>
+  <div class="decisions-row">
+    {% for proposal in (approved + rejected)|sort(attribute='reviewed_at', reverse=True) %}
+    {% if loop.index <= 4 %}
+    <div class="decision-chip {{ 'approved' if proposal.status == 'approved' else 'rejected' }}">
+      <span class="decision-icon">{{ '✓' if proposal.status == 'approved' else '✗' }}</span>
+      <span class="decision-title">{{ proposal.job_title | truncate(40) }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  {% if crew_status.running %}
+  (function poll() {
+    setTimeout(function() {
+      fetch('{{ url_for("crew_status") }}')
+        .then(r => r.json())
+        .then(data => {
+          if (!data.running) {
+            window.location.reload();
+          } else {
+            poll();
+          }
+        })
+        .catch(() => setTimeout(poll, 5000));
+    }, 4000);
+  })();
+  {% endif %}
+</script>
+{% endblock %}

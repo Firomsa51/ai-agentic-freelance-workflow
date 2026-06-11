@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Approved Proposals – CrewAI Job Agent{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Approved Proposals</h1>
+    <p class="page-subtitle">Ready to send to clients</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-secondary">← Back to Dashboard</a>
+</div>
+
+{% if not smtp_configured %}
+<div class="smtp-notice">
+  <span class="smtp-notice-icon">📧</span>
+  <div>
+    <strong>Email delivery not configured.</strong>
+    Set <code>SMTP_SERVER</code>, <code>SMTP_PORT</code>, <code>SENDER_EMAIL</code>, and
+    <code>SENDER_PASSWORD</code> environment variables to enable the Email Proposal button.
+  </div>
+</div>
+{% endif %}
+
+{% if proposals %}
+  <div class="proposals-grid">
+    {% for proposal in proposals %}
+    <div class="proposal-card approved">
+      <div class="proposal-header">
+        <div class="proposal-meta">
+          <span class="proposal-company">{{ proposal.company | default('Unknown') }}</span>
+          {% if proposal.job_score %}
+          <span class="score-badge score-approved">Score: {{ proposal.job_score }}/100</span>
+          {% endif %}
+          <span class="status-pill approved">✓ Approved</span>
+        </div>
+        <h3 class="proposal-title">{{ proposal.job_title | default('Untitled') }}</h3>
+        <div class="proposal-details-row">
+          {% if proposal.price_range %}
+          <span class="detail-chip">💰 {{ proposal.price_range }}</span>
+          {% endif %}
+          {% if proposal.timeline %}
+          <span class="detail-chip">⏱ {{ proposal.timeline }}</span>
+          {% endif %}
+          {% if proposal.reviewed_at %}
+          <span class="detail-chip">📅 Approved {{ proposal.reviewed_at[:10] }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="proposal-body">
+        <div class="proposal-text-block">
+          <h4 class="proposal-label">Proposal Text</h4>
+          <p class="proposal-text copyable">{{ proposal.proposal_text | default('No proposal text.') }}</p>
+          <button class="btn btn-copy" onclick="copyText(this, '{{ proposal.proposal_text | replace("'", "\\'") | replace(newline, "\\n") }}')">
+            Copy Text
+          </button>
+        </div>
+
+        {% if proposal.key_skills_highlighted %}
+        <div class="skills-row">
+          {% for skill in proposal.key_skills_highlighted %}
+          <span class="skill-tag">{{ skill }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if proposal.job_url and proposal.job_url != '#' %}
+        <a href="{{ proposal.job_url }}" target="_blank" rel="noopener noreferrer" class="job-link">
+          View Original Job →
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="proposal-actions">
+        {% if smtp_configured %}
+        <button
+          class="btn btn-email"
+          onclick="openEmailModal('{{ proposal.id }}', '{{ proposal.job_title | replace("'", "\\'") }}')"
+        >
+          📧 Email
+        </button>
+        {% else %}
+        <button class="btn btn-email btn-email-disabled" disabled title="Configure SMTP to enable">
+          📧 Email
+        </button>
+        {% endif %}
+        <form method="POST" action="{{ url_for('reject_proposal', proposal_id=proposal.id) }}" style="display:inline">
+          <button type="submit" class="btn btn-reject">Move to Rejected</button>
+        </form>
+        <form method="POST" action="{{ url_for('delete_proposal', proposal_id=proposal.id) }}" style="display:inline">
+          <button type="submit" class="btn btn-delete" onclick="return confirm('Delete this proposal?')">🗑 Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">✅</div>
+    <p class="empty-text">No approved proposals yet. Review and approve proposals from the dashboard.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Dashboard</a>
+  </div>
+{% endif %}
+
+<!-- Email Modal -->
+<div id="email-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">📧 Email Proposal</h3>
+      <button class="modal-close" onclick="closeEmailModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-subtitle" id="modal-subtitle"></p>
+      <form id="email-form" method="POST" action="" onsubmit="return validateEmailForm()">
+        <div class="field-group">
+          <label for="recipient-input" class="field-label">Recipient Email Address</label>
+          <input
+            type="email"
+            id="recipient-input"
+            name="recipient"
+            class="field-input"
+            placeholder="client@example.com"
+            maxlength="254"
+            required
+            autocomplete="email"
+          />
+          <p class="field-hint">The proposal will be sent as a formatted email to this address.</p>
+          <p id="email-error" class="field-error" style="display:none"></p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeEmailModal()">Cancel</button>
+          <button type="submit" class="btn btn-email-send">Send Email →</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyText(btn, text) {
+  const decoded = text.replace(/\\n/g, '\n');
+  navigator.clipboard.writeText(decoded).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.classList.add('btn-copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('btn-copied'); }, 2000);
+  });
+}
+
+function openEmailModal(proposalId, jobTitle) {
+  const modal = document.getElementById('email-modal');
+  const form = document.getElementById('email-form');
+  const subtitle = document.getElementById('modal-subtitle');
+  const input = document.getElementById('recipient-input');
+  const errEl = document.getElementById('email-error');
+
+  form.action = '/proposal/' + proposalId + '/email';
+  subtitle.textContent = 'Sending proposal for: ' + jobTitle;
+  input.value = '';
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 80);
+}
+
+function closeEmailModal() {
+  document.getElementById('email-modal').style.display = 'none';
+}
+
+function validateEmailForm() {
+  const input = document.getElementById('recipient-input');
+  const errEl = document.getElementById('email-error');
+  const val = input.value.trim();
+
+  const emailRe = /^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{0,62}@[a-zA-Z0-9\-]{1,63}(?:\.[a-zA-Z0-9\-]{1,63})*\.[a-zA-Z]{2,10}$/;
+
+  if (!val) {
+    errEl.textContent = 'Please enter a recipient email address.';
+    errEl.style.display = 'block';
+    input.focus();
+    return false;
+  }
+  if (/[\r\n\t\x00]/.test(val)) {
+    errEl.textContent = 'Email address contains illegal characters.';
+    errEl.style.display = 'block';
+    input.focus();
+    return false;
+  }
+  if (!emailRe.test(val)) {
+    errEl.textContent = 'Please enter a valid email address (e.g. user@example.com).';
+    errEl.style.display = 'block';
+    input.focus();
+    return false;
+  }
+
+  errEl.style.display = 'none';
+  return true;
+}
+
+document.getElementById('email-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEmailModal();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeEmailModal();
+});
+</script>
+{% endblock %}

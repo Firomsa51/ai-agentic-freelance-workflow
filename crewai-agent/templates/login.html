@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Login – CrewAI Job Agent{% endblock %}
+{% block content %}
+<div class="login-wrapper">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-icon">⚡</div>
+      <h1 class="login-title">CrewAI Job Agent</h1>
+      <p class="login-subtitle">Multi-Agent AI Freelance System</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('login') }}" class="login-form" autocomplete="off">
+      <div class="field-group">
+        <label for="password" class="field-label">Dashboard Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          class="field-input"
+          placeholder="Enter your dashboard password"
+          required
+          autofocus
+          maxlength="256"
+        />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Access Dashboard</button>
+    </form>
+
+    <p class="login-hint">Set your password via the <code>DASHBOARD_PASSWORD</code> environment variable.</p>
+  </div>
+</div>
+{% endblock %}

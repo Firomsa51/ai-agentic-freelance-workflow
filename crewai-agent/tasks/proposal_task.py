@@ -1,0 +1,33 @@
+from crewai import Task
+
+
+def build_proposal_task(agent, context_tasks: list) -> Task:
+    return Task(
+        description=(
+            "Write a professional, tailored freelance proposal for each of the top 3 ranked jobs.\n\n"
+            "For each proposal:\n"
+            "1. HOOK (2-3 sentences): Reference something specific from the job description to show you "
+            "   read it carefully. Identify the core problem the client needs solved.\n"
+            "2. RELEVANT EXPERIENCE (2-3 sentences): Mention a specific, relevant skill or past result "
+            "   that directly applies. Use concrete numbers or outcomes if possible.\n"
+            "3. TECHNICAL APPROACH (3-4 sentences): Briefly describe HOW you would solve their problem. "
+            "   Name specific tools, frameworks, or methods. Show technical depth.\n"
+            "4. TIMELINE & PRICE (1-2 sentences): Give a realistic delivery window and price range. "
+            "   Be specific — e.g., '5-7 business days, $800-$1,200 depending on scope.'\n"
+            "5. CALL TO ACTION (1 sentence): End with a specific next step — schedule a call, share "
+            "   a portfolio link, or ask one clarifying question.\n\n"
+            "Rules:\n"
+            "- Never use: 'I am passionate', 'I would love to', 'I am a fast learner'\n"
+            "- Each proposal must be 200-350 words\n"
+            "- Write in first person, confident tone, no fluff\n"
+            "- Return all proposals as a single JSON array"
+        ),
+        expected_output=(
+            "A JSON array of proposal objects, each containing: "
+            "job_title (str), company (str), job_url (str), job_score (int), "
+            "proposal_text (str, 200-350 words), timeline (str), price_range (str), "
+            "key_skills_highlighted (list of strings)."
+        ),
+        agent=agent,
+        context=context_tasks,
+    )
