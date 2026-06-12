@@ -1,17 +1,23 @@
 from crewai import Task
 
 
-def build_proposal_task(agent, context_tasks: list) -> Task:
+def build_proposal_task(agent, context_tasks: list, user_profile: str = "") -> Task:
     return Task(
         description=(
+            "Here is the freelancer's real background, skills, and experience profile. "
+            "Use this as the source of truth for any claims about skills, experience, or past results "
+            "in the proposals — do not invent skills or experience not supported by this profile:\n\n"
+            f"--- FREELANCER PROFILE ---\n{user_profile}\n--- END PROFILE ---\n\n"
             "Write a professional, tailored freelance proposal for each of the top 3 ranked jobs.\n\n"
             "For each proposal:\n"
             "1. HOOK (2-3 sentences): Reference something specific from the job description to show you "
             "   read it carefully. Identify the core problem the client needs solved.\n"
             "2. RELEVANT EXPERIENCE (2-3 sentences): Mention a specific, relevant skill or past result "
-            "   that directly applies. Use concrete numbers or outcomes if possible.\n"
-            "3. TECHNICAL APPROACH (3-4 sentences): Briefly describe HOW you would solve their problem. "
-            "   Name specific tools, frameworks, or methods. Show technical depth.\n"
+            "   from the freelancer's profile above that directly applies. Use concrete numbers or "
+            "   outcomes if possible.\n"
+            "3. TECHNICAL APPROACH (3-4 sentences): Briefly describe HOW you would solve their problem, "
+            "   drawing on the tools and frameworks listed in the profile. Name specific tools, "
+            "   frameworks, or methods. Show technical depth.\n"
             "4. TIMELINE & PRICE (1-2 sentences): Give a realistic delivery window and price range. "
             "   Be specific — e.g., '5-7 business days, $800-$1,200 depending on scope.'\n"
             "5. CALL TO ACTION (1 sentence): End with a specific next step — schedule a call, share "
@@ -20,6 +26,7 @@ def build_proposal_task(agent, context_tasks: list) -> Task:
             "- Never use: 'I am passionate', 'I would love to', 'I am a fast learner'\n"
             "- Each proposal must be 200-350 words\n"
             "- Write in first person, confident tone, no fluff\n"
+            "- Only reference skills/experience that appear in the freelancer's profile above\n"
             "- Return all proposals as a single JSON array"
         ),
         expected_output=(
