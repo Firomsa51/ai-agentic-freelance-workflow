@@ -30,7 +30,7 @@ def build_llm():
             raise EnvironmentError("GROQ_API_KEY is not set. Add it in your environment secrets.")
         logger.info("Using LLM provider: Groq (llama3-8b-8192)")
         return ChatGroq(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             api_key=api_key,
             temperature=0.3,
         )
