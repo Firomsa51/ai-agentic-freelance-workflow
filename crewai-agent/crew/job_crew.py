@@ -8,10 +8,23 @@ from security.sanitizer import get_secure_logger
 
 logger = get_secure_logger(__name__)
 
+PROFILE_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "my_profile.txt")
+
+
+def load_user_profile() -> str:
+    try:
+        with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if content:
+                return content
+            return "No profile information provided."
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"Profile file not found or unreadable: {e}")
+        return "No profile information provided."
+
 
 def build_llm():
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
-
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
         api_key = os.getenv("GEMINI_API_KEY", "")
@@ -52,12 +65,13 @@ def _extract_json_array(text: str) -> list:
 
 def run_job_crew(keywords: str = "AI automation freelance Python") -> dict:
     logger.info(f"Starting job crew with keywords: {keywords}")
-
     try:
         llm = build_llm()
     except EnvironmentError as e:
         logger.error(f"LLM setup failed: {e}")
         return {"success": False, "error": str(e), "proposals": []}
+
+    user_profile = load_user_profile()
 
     scout = build_scout_agent(llm)
     analyst = build_analyst_agent(llm)
@@ -65,7 +79,11 @@ def run_job_crew(keywords: str = "AI automation freelance Python") -> dict:
 
     scout_task = build_scout_task(scout, keywords)
     analyst_task = build_analyst_task(analyst, context_tasks=[scout_task])
-    proposal_task = build_proposal_task(writer, context_tasks=[scout_task, analyst_task])
+    proposal_task = build_proposal_task(
+        writer,
+        context_tasks=[scout_task, analyst_task],
+        user_profile=user_profile,
+    )
 
     crew = Crew(
         agents=[scout, analyst, writer],
@@ -73,14 +91,11 @@ def run_job_crew(keywords: str = "AI automation freelance Python") -> dict:
         process=Process.sequential,
         verbose=True,
     )
-
     try:
         result = crew.kickoff()
         raw_output = str(result)
         logger.info("Crew execution completed successfully.")
-
         proposals = _extract_json_array(raw_output)
-
         if not proposals:
             proposals = [
                 {
@@ -95,9 +110,7 @@ def run_job_crew(keywords: str = "AI automation freelance Python") -> dict:
                     "raw": True,
                 }
             ]
-
         return {"success": True, "proposals": proposals, "raw_output": raw_output}
-
     except Exception as e:
         logger.error(f"Crew execution failed: {type(e).__name__}: {e}")
         return {"success": False, "error": str(e), "proposals": []}
