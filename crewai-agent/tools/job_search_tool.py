@@ -4,7 +4,7 @@ import time
 import requests
 import feedparser
 from typing import Optional, Type
-from crewai.tools import BaseTool
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 from security.sanitizer import get_secure_logger, sanitize_input
 
