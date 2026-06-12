@@ -1,0 +1,1 @@
+Senior Python Developer with 5+ years experience in backend development, automation, and AI integration. Skilled in Flask, FastAPI, REST APIs, web scraping, and CrewAI multi-agent systems. Built production AI agent pipelines using Groq/LLaMA. Strong communication, fast turnaround, available for long-term contracts.
