@@ -1,5 +1,4 @@
 import os
-import json
 import uuid
 import threading
 from datetime import datetime
@@ -18,6 +17,10 @@ from security.sanitizer import (
 )
 from email_sender import send_proposal_email, is_smtp_configured
 from email_sender import validate_email_address
+from database import (
+    init_db, insert_proposals, get_proposals, get_proposal_by_id,
+    update_status, delete_proposal_by_id
+)
 
 logger = get_secure_logger(__name__)
 
@@ -26,23 +29,8 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(32))
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-DATA_FILE = Path("data/proposals.json")
-RUNS_FILE = Path("data/runs.json")
-DATA_FILE.parent.mkdir(exist_ok=True)
-
-
-def _load_json(path: Path) -> list:
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return []
-    return []
-
-
-def _save_json(path: Path, data: list) -> None:
-    path.write_text(json.dumps(data, indent=2))
-
+Path("data").mkdir(exist_ok=True)
+init_db()
 
 _crew_status: dict = {"running": False, "last_run": None, "last_error": None}
 
@@ -96,7 +84,7 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    proposals = _load_json(DATA_FILE)
+    proposals = get_proposals()
     pending = [p for p in proposals if p.get("status") == "pending"]
     approved = [p for p in proposals if p.get("status") == "approved"]
     rejected = [p for p in proposals if p.get("status") == "rejected"]
@@ -134,17 +122,18 @@ def run_crew():
             result = run_job_crew(keywords)
 
             if result["success"] and result.get("proposals"):
-                proposals = _load_json(DATA_FILE)
+                new_proposals = []
                 for p in result["proposals"]:
-                    proposals.append({
+                    new_proposals.append({
                         "id": str(uuid.uuid4()),
                         "status": "pending",
                         "created_at": datetime.utcnow().isoformat(),
+                        "reviewed_at": None,
                         "keywords": keywords,
                         **p,
                     })
-                _save_json(DATA_FILE, proposals)
-                logger.info(f"Saved {len(result['proposals'])} proposals to disk.")
+                insert_proposals(new_proposals)
+                logger.info(f"Saved {len(new_proposals)} proposals to database.")
             else:
                 _crew_status["last_error"] = result.get("error", "Unknown error")
                 logger.error(f"Crew run failed: {_crew_status['last_error']}")
@@ -168,7 +157,7 @@ def crew_status():
         "running": _crew_status["running"],
         "last_run": _crew_status["last_run"],
         "last_error": mask_secrets(_crew_status["last_error"] or ""),
-        "pending_count": len([p for p in _load_json(DATA_FILE) if p.get("status") == "pending"]),
+        "pending_count": len(get_proposals(status="pending")),
     })
 
 
@@ -180,17 +169,8 @@ def approve_proposal(proposal_id: str):
     except ValueError:
         return jsonify({"error": "Invalid proposal ID"}), 400
 
-    proposals = _load_json(DATA_FILE)
-    updated = False
-    for p in proposals:
-        if p["id"] == proposal_id:
-            p["status"] = "approved"
-            p["reviewed_at"] = datetime.utcnow().isoformat()
-            updated = True
-            break
-    if updated:
-        _save_json(DATA_FILE, proposals)
-        flash(f"Proposal approved!", "success")
+    if update_status(proposal_id, "approved", datetime.utcnow().isoformat()):
+        flash("Proposal approved!", "success")
     else:
         flash("Proposal not found.", "error")
     return redirect(url_for("index"))
@@ -204,16 +184,7 @@ def reject_proposal(proposal_id: str):
     except ValueError:
         return jsonify({"error": "Invalid proposal ID"}), 400
 
-    proposals = _load_json(DATA_FILE)
-    updated = False
-    for p in proposals:
-        if p["id"] == proposal_id:
-            p["status"] = "rejected"
-            p["reviewed_at"] = datetime.utcnow().isoformat()
-            updated = True
-            break
-    if updated:
-        _save_json(DATA_FILE, proposals)
+    if update_status(proposal_id, "rejected", datetime.utcnow().isoformat()):
         flash("Proposal rejected.", "info")
     else:
         flash("Proposal not found.", "error")
@@ -228,9 +199,7 @@ def delete_proposal(proposal_id: str):
     except ValueError:
         return jsonify({"error": "Invalid proposal ID"}), 400
 
-    proposals = _load_json(DATA_FILE)
-    proposals = [p for p in proposals if p["id"] != proposal_id]
-    _save_json(DATA_FILE, proposals)
+    delete_proposal_by_id(proposal_id)
     flash("Proposal deleted.", "info")
     return redirect(url_for("index"))
 
@@ -251,8 +220,7 @@ def email_proposal(proposal_id: str):
         flash(f"Invalid recipient address: {exc}", "error")
         return redirect(url_for("approved_proposals"))
 
-    proposals = _load_json(DATA_FILE)
-    proposal = next((p for p in proposals if p["id"] == proposal_id), None)
+    proposal = get_proposal_by_id(proposal_id)
 
     if not proposal:
         flash("Proposal not found.", "error")
@@ -290,7 +258,7 @@ def email_proposal(proposal_id: str):
 @app.route("/approved")
 @login_required
 def approved_proposals():
-    proposals = [p for p in _load_json(DATA_FILE) if p.get("status") == "approved"]
+    proposals = get_proposals(status="approved")
     return render_template(
         "proposals.html",
         proposals=proposals,
