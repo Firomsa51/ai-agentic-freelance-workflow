@@ -23,7 +23,7 @@ class JobSearchInput(BaseModel):
         default="AI automation freelance",
         description="Keywords to search for in job listings"
     )
-    max_results: int = Field(default=15, description="Maximum number of jobs to return")
+    max_results: int = Field(default=8, description="Maximum number of jobs to return")
 
 
 class JobSearchTool(BaseTool):
@@ -34,7 +34,7 @@ class JobSearchTool(BaseTool):
     )
     args_schema: Type[BaseModel] = JobSearchInput
 
-    def _run(self, keywords: str = "AI automation freelance", max_results: int = 15) -> str:
+    def _run(self, keywords: str = "AI automation freelance", max_results: int = 8) -> str:
         try:
             safe_keywords = sanitize_input(keywords, max_length=200)
         except ValueError:
@@ -74,7 +74,7 @@ class JobSearchTool(BaseTool):
                         jobs.append({
                             "title": title,
                             "company": entry.get("author", "Unknown"),
-                            "description": summary[:500],
+                            "description": summary[:200],
                             "url": entry.get("link", ""),
                             "source": "WeWorkRemotely",
                             "posted": entry.get("published", ""),
@@ -102,7 +102,7 @@ class JobSearchTool(BaseTool):
                         jobs.append({
                             "title": title,
                             "company": item.get("company", "Unknown"),
-                            "description": desc[:500],
+                            "description": desc[:200],
                             "url": item.get("url", ""),
                             "source": "RemoteOK",
                             "posted": item.get("date", ""),
@@ -133,7 +133,7 @@ class JobSearchTool(BaseTool):
                     jobs.append({
                         "title": item.get("title", ""),
                         "company": item.get("company", {}).get("display_name", "Unknown"),
-                        "description": item.get("description", "")[:500],
+                        "description": item.get("description", "")[:200],
                         "url": item.get("redirect_url", ""),
                         "source": "Adzuna",
                         "salary": f"${item.get('salary_min', 0):.0f} - ${item.get('salary_max', 0):.0f}",
@@ -153,7 +153,7 @@ class JobSearchTool(BaseTool):
                     "We need an expert in building AI-powered automation workflows using "
                     "Zapier, Make (Integromat), and Python. Must integrate OpenAI/Groq APIs "
                     "to automate lead generation and CRM updates."
-                ),
+                )[:200],
                 "url": "https://weworkremotely.com/jobs/sample-1",
                 "source": "WeWorkRemotely (mock)",
                 "salary": "$50-$80/hr",
@@ -166,7 +166,7 @@ class JobSearchTool(BaseTool):
                     "Build a multi-agent AI system using CrewAI or LangChain to automate "
                     "market research and report generation. Must have experience with LLM "
                     "APIs and prompt engineering."
-                ),
+                )[:200],
                 "url": "https://remoteok.com/jobs/sample-2",
                 "source": "RemoteOK (mock)",
                 "salary": "$4,000-$8,000/project",
@@ -179,7 +179,7 @@ class JobSearchTool(BaseTool):
                     "Automate our customer support using AI chatbots and integrate with "
                     "Shopify, HubSpot, and Slack. No-code tools preferred (n8n, Activepieces). "
                     "Short turnaround required."
-                ),
+                )[:200],
                 "url": "https://weworkremotely.com/jobs/sample-3",
                 "source": "WeWorkRemotely (mock)",
                 "salary": "$1,500-$3,000/project",
@@ -192,7 +192,7 @@ class JobSearchTool(BaseTool):
                     "Implement a Retrieval-Augmented Generation pipeline for a legal document "
                     "Q&A system. Must have experience with vector databases (Pinecone/Chroma), "
                     "LangChain, and Python. 3-month contract."
-                ),
+                )[:200],
                 "url": "https://remoteok.com/jobs/sample-4",
                 "source": "RemoteOK (mock)",
                 "salary": "$6,000-$10,000/month",
@@ -205,7 +205,7 @@ class JobSearchTool(BaseTool):
                     "Build automated scrapers and data pipelines to collect competitor pricing, "
                     "social media mentions, and SEO data. Deliver clean JSON/CSV output. "
                     "Python + Playwright or Selenium required."
-                ),
+                )[:200],
                 "url": "https://weworkremotely.com/jobs/sample-5",
                 "source": "WeWorkRemotely (mock)",
                 "salary": "$25-$50/hr",
