@@ -26,12 +26,14 @@ def build_proposal_task(agent, context_tasks: list, user_profile: str = "") -> T
             "- Each proposal must be 120-180 words\n"
             "- Write in first person, confident tone, no fluff\n"
             "- Only reference skills/experience that appear in the freelancer's profile above\n"
+            "- job_url and company MUST be copied EXACTLY as provided in the scout/analyst data above — "
+            "never invent, modify, shorten, or use placeholder URLs like example.com\n"
             "- Return ONLY the top 2 proposals as a single JSON array, no extra text"
         ),
         expected_output=(
             "A JSON array of exactly 2 proposal objects, each containing: "
-            "job_title (str), company (str), job_url (str), job_score (int), "
-            "proposal_text (str, 120-180 words), timeline (str), price_range (str), "
+            "job_title (str), company (str), job_url (str, copied exactly from the original job data), "
+            "job_score (int), proposal_text (str, 120-180 words), timeline (str), price_range (str), "
             "key_skills_highlighted (list of strings)."
         ),
         agent=agent,
