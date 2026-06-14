@@ -16,13 +16,14 @@ def build_analyst_task(agent, context_tasks: list) -> Task:
             "2. Sum the scores for a total out of 100.\n"
             "3. Add a one-sentence reasoning for the total score.\n"
             "4. Sort by total score descending.\n"
-            "5. Select the TOP 3 jobs for proposal writing.\n"
-            "6. Return as a JSON array sorted by score."
+            "5. Select the TOP 2 jobs only — to conserve processing budget.\n"
+            "6. Return as a JSON array sorted by score.\n"
+            "7. IMPORTANT: Preserve the exact original job URL and company name — never modify them."
         ),
         expected_output=(
-            "A JSON array of the top 3 jobs, each containing all original job fields plus: "
+            "A JSON array of the top 2 jobs, each containing all original job fields plus: "
             "score (int 0-100), score_breakdown (object with each dimension and its points), "
-            "and reasoning (string explaining the total score). Sorted by score descending."
+            "and reasoning (str explaining the total score). Sorted by score descending."
         ),
         agent=agent,
         context=context_tasks,
