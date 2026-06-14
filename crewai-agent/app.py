@@ -19,7 +19,7 @@ from email_sender import send_proposal_email, is_smtp_configured
 from email_sender import validate_email_address
 from database import (
     init_db, insert_proposals, get_proposals, get_proposal_by_id,
-    update_status, delete_proposal_by_id
+    update_status, delete_proposal_by_id, update_proposal_text, get_analytics
 )
 
 logger = get_secure_logger(__name__)
@@ -88,12 +88,14 @@ def index():
     pending = [p for p in proposals if p.get("status") == "pending"]
     approved = [p for p in proposals if p.get("status") == "approved"]
     rejected = [p for p in proposals if p.get("status") == "rejected"]
+    analytics = get_analytics()
     return render_template(
         "index.html",
         pending=pending,
         approved=approved,
         rejected=rejected,
         crew_status=_crew_status,
+        analytics=analytics,
     )
 
 
@@ -204,6 +206,26 @@ def delete_proposal(proposal_id: str):
     return redirect(url_for("index"))
 
 
+@app.route("/proposal/<proposal_id>/edit", methods=["POST"])
+@login_required
+def edit_proposal(proposal_id: str):
+    try:
+        proposal_id = sanitize_input(proposal_id, max_length=64)
+    except ValueError:
+        return jsonify({"error": "Invalid proposal ID"}), 400
+
+    new_text = request.form.get("proposal_text", "").strip()
+    if not new_text:
+        flash("Proposal text cannot be empty.", "error")
+        return redirect(url_for("index"))
+
+    if update_proposal_text(proposal_id, new_text):
+        flash("Proposal updated successfully.", "success")
+    else:
+        flash("Proposal not found.", "error")
+    return redirect(url_for("index"))
+
+
 @app.route("/proposal/<proposal_id>/email", methods=["POST"])
 @login_required
 def email_proposal(proposal_id: str):
@@ -265,6 +287,13 @@ def approved_proposals():
         view="approved",
         smtp_configured=is_smtp_configured(),
     )
+
+
+@app.route("/analytics")
+@login_required
+def analytics():
+    stats = get_analytics()
+    return jsonify(stats)
 
 
 @app.route("/health")
