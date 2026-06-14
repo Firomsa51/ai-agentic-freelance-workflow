@@ -14,3 +14,5 @@ feedparser==6.0.11
 markupsafe==2.1.5
 httpx==0.27.0
 psycopg2-binary==2.9.9
+flask-cors==4.0.0
+httpx==0.27.0
