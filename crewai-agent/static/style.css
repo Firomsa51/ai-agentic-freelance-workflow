@@ -1,341 +1,460 @@
-{% extends "base.html" %}
-{% block title %}Dashboard – CrewAI Job Agent{% endblock %}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-{% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">Agent Dashboard</h1>
-    <p class="page-subtitle">Human-in-the-Loop Proposal Review</p>
-  </div>
-  <div class="header-stats">
-    <div class="stat-badge stat-pending">{{ pending|length }} Pending</div>
-    <div class="stat-badge stat-approved">{{ approved|length }} Approved</div>
-    <div class="stat-badge stat-rejected">{{ rejected|length }} Rejected</div>
-  </div>
-</div>
+:root {
+  --bg: #0d0f14;
+  --bg-card: #13151c;
+  --bg-card-hover: #1a1d27;
+  --bg-input: #1e2130;
+  --border: #2a2d3e;
+  --border-focus: #5b6af0;
+  --text: #e4e6f0;
+  --text-muted: #7b7f96;
+  --text-dim: #4a4e65;
+  --accent: #5b6af0;
+  --accent-hover: #6e7cf5;
+  --accent-glow: rgba(91,106,240,0.25);
+  --green: #22c55e;
+  --green-bg: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-bg: rgba(239,68,68,0.12);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245,158,11,0.12);
+  --purple: #a855f7;
+  --purple-bg: rgba(168,85,247,0.12);
+  --cyan: #06b6d4;
+  --cyan-bg: rgba(6,182,212,0.12);
+  --gold: #eab308;
+  --gold-bg: rgba(234,179,8,0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
 
-<!-- Analytics Strip -->
-{% if analytics %}
-<div class="analytics-strip">
-  <div class="analytics-card">
-    <span class="analytics-value">{{ analytics.total }}</span>
-    <span class="analytics-label">Total Jobs</span>
-  </div>
-  <div class="analytics-card highlight-green">
-    <span class="analytics-value">{{ analytics.high_match }}</span>
-    <span class="analytics-label">High Match</span>
-  </div>
-  <div class="analytics-card highlight-yellow">
-    <span class="analytics-value">{{ analytics.medium_match }}</span>
-    <span class="analytics-label">Medium Match</span>
-  </div>
-  <div class="analytics-card highlight-red">
-    <span class="analytics-value">{{ analytics.low_match }}</span>
-    <span class="analytics-label">Low Match</span>
-  </div>
-  <div class="analytics-card highlight-blue">
-    <span class="analytics-value">{{ analytics.approval_rate }}%</span>
-    <span class="analytics-label">Approval Rate</span>
-  </div>
-  <div class="analytics-card highlight-purple">
-    <span class="analytics-value">{{ analytics.avg_win_probability }}%</span>
-    <span class="analytics-label">Avg Win Rate</span>
-  </div>
-  <div class="analytics-card highlight-gold">
-    <span class="analytics-value">{{ analytics.high_value_opportunities }}</span>
-    <span class="analytics-label">High Value</span>
-  </div>
-</div>
-{% endif %}
+html { font-size: 16px; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
 
-<!-- Run Panel -->
-<div class="card run-card">
-  <div class="card-header">
-    <h2 class="card-title">
-      <span class="card-icon">🤖</span> Dispatch Agents
-    </h2>
-    <div class="agent-status {% if crew_status.running %}status-running{% else %}status-idle{% endif %}">
-      <span class="status-dot"></span>
-      {% if crew_status.running %}Running…{% else %}Idle{% endif %}
-    </div>
-  </div>
-  <div class="card-body">
-    <div class="agent-pipeline">
-      <div class="agent-node">
-        <div class="agent-avatar scout">🔍</div>
-        <span class="agent-name">Scout</span>
-        <span class="agent-role">Finds Jobs</span>
-      </div>
-      <div class="pipeline-arrow">→</div>
-      <div class="agent-node">
-        <div class="agent-avatar analyst">📊</div>
-        <span class="agent-name">Analyst</span>
-        <span class="agent-role">Scores & Ranks</span>
-      </div>
-      <div class="pipeline-arrow">→</div>
-      <div class="agent-node">
-        <div class="agent-avatar strategist">🎯</div>
-        <span class="agent-name">Strategist</span>
-        <span class="agent-role">Apply/Skip</span>
-      </div>
-      <div class="pipeline-arrow">→</div>
-      <div class="agent-node">
-        <div class="agent-avatar writer">✍️</div>
-        <span class="agent-name">Writer</span>
-        <span class="agent-role">Writes Proposals</span>
-      </div>
-    </div>
+.navbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2rem; height: 56px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { display: flex; align-items: center; gap: .5rem; }
+.nav-icon { font-size: 1.2rem; }
+.nav-title { font-weight: 700; font-size: .95rem; letter-spacing: -.01em; }
+.nav-links { display: flex; align-items: center; gap: .25rem; }
+.nav-link {
+  padding: .35rem .8rem; border-radius: var(--radius-sm);
+  font-size: .875rem; color: var(--text-muted); text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.nav-link:hover, .nav-link.active { background: var(--bg-input); color: var(--text); }
+.nav-logout { color: var(--red); }
+.nav-logout:hover { background: var(--red-bg); color: var(--red); }
 
-    <form method="POST" action="{{ url_for('run_crew') }}" class="run-form">
-      <div class="run-form-row">
-        <div class="field-group flex-1">
-          <label for="keywords" class="field-label">Search Keywords</label>
-          <input
-            type="text"
-            id="keywords"
-            name="keywords"
-            class="field-input"
-            value="AI automation freelance Python"
-            placeholder="e.g. AI automation freelance Python"
-            maxlength="300"
-            {% if crew_status.running %}disabled{% endif %}
-          />
-        </div>
-        <button
-          type="submit"
-          class="btn btn-primary btn-run"
-          {% if crew_status.running %}disabled{% endif %}
-        >
-          {% if crew_status.running %}
-            <span class="spinner"></span> Agents Running…
-          {% else %}
-            ⚡ Run Agents
-          {% endif %}
-        </button>
-      </div>
-    </form>
+.main-content { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
 
-    {% if crew_status.last_error %}
-    <div class="error-box">
-      <strong>Last run error:</strong> {{ crew_status.last_error }}
-    </div>
-    {% endif %}
-    {% if crew_status.last_run %}
-    <p class="last-run-time">Last run: {{ crew_status.last_run }}</p>
-    {% endif %}
-  </div>
-</div>
+.alerts { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1.5rem; }
+.alert {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .75rem 1rem; border-radius: var(--radius-sm); font-size: .875rem;
+  border: 1px solid var(--border);
+}
+.alert-success { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.alert-error   { background: var(--red-bg);   border-color: var(--red);   color: var(--red);   }
+.alert-warning { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+.alert-info    { background: var(--bg-input); border-color: var(--border); color: var(--text-muted); }
+.alert-close { background: none; border: none; color: inherit; cursor: pointer; font-size: 1.1rem; padding: 0 .25rem; line-height: 1; }
 
-<!-- Pending Proposals -->
-<section class="proposals-section">
-  <h2 class="section-title">
-    <span>Pending Review</span>
-    <span class="section-count">{{ pending|length }}</span>
-  </h2>
-  {% if pending %}
-    <div class="proposals-grid">
-      {% for proposal in pending %}
-      <div class="proposal-card pending {% if proposal.opportunity_tier == 'High Value' %}card-high-value{% endif %}">
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+}
+.page-title { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }
+.page-subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .2rem; }
+.header-stats { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.stat-badge {
+  padding: .3rem .75rem; border-radius: 20px; font-size: .8rem; font-weight: 600;
+  border: 1px solid;
+}
+.stat-pending  { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+.stat-approved { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.stat-rejected { background: var(--red-bg);   border-color: var(--red);   color: var(--red);   }
 
-        <!-- Opportunity Tier Banner -->
-        {% if proposal.opportunity_tier and proposal.opportunity_tier != 'Unknown' %}
-        <div class="tier-banner tier-{{ proposal.opportunity_tier | lower | replace(' ', '-') }}">
-          {% if proposal.opportunity_tier == 'High Value' %}🔥{% elif proposal.opportunity_tier == 'Medium Value' %}⚡{% else %}💡{% endif %}
-          {{ proposal.opportunity_tier }}
-        </div>
-        {% endif %}
+.analytics-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: .75rem;
+  margin-bottom: 1.75rem;
+}
+.analytics-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem .75rem;
+  display: flex; flex-direction: column;
+  align-items: center; text-align: center;
+  gap: .3rem;
+  transition: border-color .2s, transform .15s;
+}
+.analytics-card:hover { border-color: var(--border-focus); transform: translateY(-1px); }
+.analytics-value {
+  font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; line-height: 1;
+}
+.analytics-label {
+  font-size: .72rem; color: var(--text-muted); font-weight: 500;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.highlight-green  { border-color: rgba(34,197,94,0.3); }
+.highlight-green .analytics-value  { color: var(--green); }
+.highlight-yellow { border-color: rgba(245,158,11,0.3); }
+.highlight-yellow .analytics-value { color: var(--amber); }
+.highlight-red    { border-color: rgba(239,68,68,0.3); }
+.highlight-red .analytics-value    { color: var(--red); }
+.highlight-blue   { border-color: rgba(91,106,240,0.3); }
+.highlight-blue .analytics-value   { color: var(--accent); }
+.highlight-purple { border-color: rgba(168,85,247,0.3); }
+.highlight-purple .analytics-value { color: var(--purple); }
+.highlight-gold   { border-color: rgba(234,179,8,0.3); }
+.highlight-gold .analytics-value   { color: var(--gold); }
 
-        <div class="proposal-header">
-          <div class="proposal-meta">
-            <span class="proposal-company">{{ proposal.company | default('Unknown') }}</span>
-            {% if proposal.job_score %}
-            <span class="score-badge">Score: {{ proposal.job_score }}/100</span>
-            {% endif %}
-          </div>
-          <h3 class="proposal-title">{{ proposal.job_title | default('Untitled') }}</h3>
-          {% if proposal.price_range %}
-          <div class="proposal-details-row">
-            <span class="detail-chip">💰 {{ proposal.price_range }}</span>
-            {% if proposal.timeline %}
-            <span class="detail-chip">⏱ {{ proposal.timeline }}</span>
-            {% endif %}
-          </div>
-          {% endif %}
-        </div>
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.5rem; border-bottom: 1px solid var(--border);
+}
+.card-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+.card-icon { font-size: 1rem; }
+.card-body { padding: 1.5rem; }
 
-        <!-- Strategist Intelligence -->
-        {% if proposal.win_probability or proposal.competition_level %}
-        <div class="intelligence-row">
-          {% if proposal.recommendation %}
-          <span class="rec-badge rec-{{ proposal.recommendation | lower }}">
-            {{ '✓ Apply' if proposal.recommendation == 'Apply' else '✗ Skip' }}
-          </span>
-          {% endif %}
-          {% if proposal.win_probability %}
-          <span class="intel-chip">
-            🎯 Win: {{ proposal.win_probability }}%
-          </span>
-          {% endif %}
-          {% if proposal.competition_level %}
-          <span class="intel-chip competition-{{ proposal.competition_level | lower }}">
-            👥 {{ proposal.competition_level }} Competition
-          </span>
-          {% endif %}
-          {% if proposal.skill_match_score %}
-          <span class="intel-chip">
-            🧠 Skill Match: {{ proposal.skill_match_score }}%
-          </span>
-          {% endif %}
-        </div>
-        {% endif %}
+.agent-status {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .8rem; font-weight: 500; padding: .25rem .75rem;
+  border-radius: 20px; border: 1px solid var(--border);
+}
+.status-idle   { color: var(--text-muted); }
+.status-running { color: var(--amber); background: var(--amber-bg); border-color: var(--amber); }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status-running .status-dot { animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-        <!-- Strategist Reasoning -->
-        {% if proposal.reasoning %}
-        <div class="reasoning-box">
-          <span class="reasoning-label">💡 Strategy:</span>
-          <span class="reasoning-text">{{ proposal.reasoning }}</span>
-        </div>
-        {% endif %}
+.agent-pipeline {
+  display: flex; align-items: center; justify-content: center; gap: .75rem;
+  margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.agent-node { display: flex; flex-direction: column; align-items: center; gap: .3rem; }
+.agent-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; border: 2px solid var(--border);
+  background: var(--bg-input);
+}
+.agent-avatar.scout      { border-color: #6366f1; }
+.agent-avatar.analyst    { border-color: #06b6d4; }
+.agent-avatar.strategist { border-color: #f59e0b; }
+.agent-avatar.writer     { border-color: #a855f7; }
+.agent-name { font-size: .85rem; font-weight: 600; }
+.agent-role { font-size: .75rem; color: var(--text-muted); }
+.pipeline-arrow { color: var(--text-dim); font-size: 1.2rem; }
 
-        <!-- Red Flags -->
-        {% if proposal.red_flags and proposal.red_flags|length > 0 %}
-        <div class="red-flags-box">
-          <span class="red-flags-label">⚠️ Red Flags:</span>
-          <ul class="red-flags-list">
-            {% for flag in proposal.red_flags %}
-            <li>{{ flag }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
+.run-form-row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+.flex-1 { flex: 1; min-width: 200px; }
+.btn-run { white-space: nowrap; min-width: 150px; height: 42px; }
+.error-box {
+  margin-top: 1rem; padding: .75rem 1rem; border-radius: var(--radius-sm);
+  background: var(--red-bg); border: 1px solid var(--red);
+  color: var(--red); font-size: .85rem;
+}
+.last-run-time { margin-top: .75rem; font-size: .8rem; color: var(--text-dim); }
 
-        <div class="proposal-body">
-          <!-- Inline Edit Toggle -->
-          <div class="proposal-text-wrapper">
-            <p class="proposal-text" id="text-{{ proposal.id }}">
-              {{ proposal.proposal_text | default('No proposal text.') }}
-            </p>
-            <form method="POST"
-                  action="{{ url_for('edit_proposal', proposal_id=proposal.id) }}"
-                  class="edit-form"
-                  id="edit-form-{{ proposal.id }}"
-                  style="display:none">
-              <textarea name="proposal_text"
-                        class="edit-textarea"
-                        rows="8">{{ proposal.proposal_text | default('') }}</textarea>
-              <div class="edit-actions">
-                <button type="submit" class="btn btn-save">💾 Save</button>
-                <button type="button"
-                        class="btn btn-cancel"
-                        onclick="cancelEdit('{{ proposal.id }}')">Cancel</button>
-              </div>
-            </form>
-          </div>
+.field-group { display: flex; flex-direction: column; gap: .4rem; }
+.field-label { font-size: .8rem; font-weight: 500; color: var(--text-muted); }
+.field-input {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  padding: .55rem .85rem; font-size: .9rem; font-family: inherit;
+  transition: border-color .15s, box-shadow .15s; outline: none; width: 100%;
+}
+.field-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-glow); }
+.field-input::placeholder { color: var(--text-dim); }
+.field-input:disabled { opacity: .5; cursor: not-allowed; }
 
-          {% if proposal.key_skills_highlighted %}
-          <div class="skills-row">
-            {% for skill in proposal.key_skills_highlighted[:5] %}
-            <span class="skill-tag">{{ skill }}</span>
-            {% endfor %}
-          </div>
-          {% endif %}
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .5rem 1rem; border-radius: var(--radius-sm); font-size: .875rem;
+  font-weight: 500; cursor: pointer; border: 1px solid transparent;
+  font-family: inherit; text-decoration: none; transition: all .15s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-secondary { background: transparent; color: var(--text-muted); border-color: var(--border); }
+.btn-secondary:hover { background: var(--bg-input); color: var(--text); }
+.btn-full { width: 100%; }
+.btn-approve { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.btn-approve:hover { background: rgba(34,197,94,0.2); }
+.btn-reject  { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.btn-reject:hover { background: rgba(239,68,68,0.2); }
+.btn-delete  { background: transparent; color: var(--text-dim); border-color: var(--border); }
+.btn-delete:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.btn-edit    { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan); }
+.btn-edit:hover { background: rgba(6,182,212,0.22); }
+.btn-save    { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-save:hover { background: var(--accent-hover); }
+.btn-cancel  { background: transparent; color: var(--text-muted); border-color: var(--border); }
+.btn-cancel:hover { background: var(--bg-input); color: var(--text); }
+.btn-copy    { margin-top: .75rem; background: var(--bg-input); color: var(--text-muted); border-color: var(--border); font-size: .8rem; }
+.btn-copy:hover { color: var(--text); }
+.btn-copied  { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.btn-email { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan); }
+.btn-email:hover:not(:disabled) { background: rgba(6,182,212,0.22); }
+.btn-email-disabled { opacity: .4; cursor: not-allowed; }
+.btn-email-send { background: var(--cyan); color: #fff; border-color: var(--cyan); }
+.btn-email-send:hover { background: #0891b2; border-color: #0891b2; }
 
-          {% if proposal.job_url and proposal.job_url != '#' %}
-          <a href="{{ proposal.job_url }}"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="job-link">
-            View Original Job →
-          </a>
-          {% endif %}
-        </div>
+.spinner {
+  width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-        <div class="proposal-actions">
-          <form method="POST"
-                action="{{ url_for('approve_proposal', proposal_id=proposal.id) }}"
-                style="display:inline">
-            <button type="submit" class="btn btn-approve">✓ Approve</button>
-          </form>
-          <form method="POST"
-                action="{{ url_for('reject_proposal', proposal_id=proposal.id) }}"
-                style="display:inline">
-            <button type="submit" class="btn btn-reject">✗ Reject</button>
-          </form>
-          <button type="button"
-                  class="btn btn-edit"
-                  onclick="toggleEdit('{{ proposal.id }}')">
-            ✏️ Edit
-          </button>
-          <form method="POST"
-                action="{{ url_for('delete_proposal', proposal_id=proposal.id) }}"
-                style="display:inline">
-            <button type="submit"
-                    class="btn btn-delete"
-                    onclick="return confirm('Delete this proposal?')">🗑</button>
-          </form>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <div class="empty-state">
-      <div class="empty-icon">📭</div>
-      <p class="empty-text">No pending proposals. Run the agents to generate new ones.</p>
-    </div>
-  {% endif %}
-</section>
+.proposals-section { margin-bottom: 2.5rem; }
+.section-title {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 1rem; font-weight: 600; margin-bottom: 1rem;
+  padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+}
+.section-count {
+  background: var(--bg-input); border: 1px solid var(--border);
+  padding: .1rem .5rem; border-radius: 20px; font-size: .78rem; color: var(--text-muted);
+}
+.section-link { font-size: .8rem; color: var(--accent); text-decoration: none; font-weight: 400; }
+.section-link:hover { text-decoration: underline; }
 
-<!-- Recent Decisions -->
-{% if approved or rejected %}
-<section class="proposals-section">
-  <h2 class="section-title">
-    <span>Recent Decisions</span>
-    <a href="{{ url_for('approved_proposals') }}" class="section-link">View all approved →</a>
-  </h2>
-  <div class="decisions-row">
-    {% for proposal in (approved + rejected)|sort(attribute='reviewed_at', reverse=True) %}
-    {% if loop.index <= 4 %}
-    <div class="decision-chip {{ 'approved' if proposal.status == 'approved' else 'rejected' }}">
-      <span class="decision-icon">{{ '✓' if proposal.status == 'approved' else '✗' }}</span>
-      <span class="decision-title">{{ proposal.job_title | truncate(40) }}</span>
-    </div>
-    {% endif %}
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
-{% endblock %}
+.proposals-grid { display: flex; flex-direction: column; gap: 1.25rem; }
+.proposal-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  box-shadow: var(--shadow); transition: border-color .2s, transform .15s;
+}
+.proposal-card:hover { border-color: var(--border-focus); transform: translateY(-1px); }
+.proposal-card.approved { border-left: 3px solid var(--green); }
+.proposal-card.pending  { border-left: 3px solid var(--amber); }
+.proposal-card.card-high-value {
+  border-left: 3px solid var(--gold);
+  box-shadow: 0 4px 24px rgba(234,179,8,0.12);
+}
 
-{% block scripts %}
-<script>
-  function toggleEdit(id) {
-    const textEl = document.getElementById('text-' + id);
-    const formEl = document.getElementById('edit-form-' + id);
-    const isHidden = formEl.style.display === 'none';
-    textEl.style.display = isHidden ? 'none' : 'block';
-    formEl.style.display = isHidden ? 'block' : 'none';
-  }
+.tier-banner {
+  padding: .35rem 1.5rem; font-size: .78rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  display: flex; align-items: center; gap: .4rem;
+}
+.tier-high-value   { background: var(--gold-bg); color: var(--gold); border-bottom: 1px solid rgba(234,179,8,0.2); }
+.tier-medium-value { background: var(--amber-bg); color: var(--amber); border-bottom: 1px solid rgba(245,158,11,0.2); }
+.tier-low-value    { background: var(--bg-input); color: var(--text-muted); border-bottom: 1px solid var(--border); }
 
-  function cancelEdit(id) {
-    document.getElementById('text-' + id).style.display = 'block';
-    document.getElementById('edit-form-' + id).style.display = 'none';
-  }
+.intelligence-row {
+  padding: .65rem 1.5rem;
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  background: rgba(0,0,0,.15); border-bottom: 1px solid var(--border);
+}
+.rec-badge {
+  padding: .2rem .65rem; border-radius: 20px;
+  font-size: .78rem; font-weight: 700; border: 1px solid;
+}
+.rec-apply { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.rec-skip  { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.intel-chip {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 20px; padding: .15rem .6rem;
+  font-size: .75rem; color: var(--text-muted);
+}
+.competition-low    { color: var(--green); border-color: rgba(34,197,94,0.3); }
+.competition-medium { color: var(--amber); border-color: rgba(245,158,11,0.3); }
+.competition-high   { color: var(--red); border-color: rgba(239,68,68,0.3); }
 
-  {% if crew_status.running %}
-  (function poll() {
-    setTimeout(function() {
-      fetch('{{ url_for("crew_status") }}')
-        .then(r => r.json())
-        .then(data => {
-          if (!data.running) {
-            window.location.reload();
-          } else {
-            poll();
-          }
-        })
-        .catch(() => setTimeout(poll, 5000));
-    }, 4000);
-  })();
-  {% endif %}
-</script>
-{% endblock %}
+.reasoning-box {
+  margin: .65rem 1.5rem 0;
+  padding: .6rem .85rem;
+  background: rgba(91,106,240,0.07);
+  border: 1px solid rgba(91,106,240,0.2);
+  border-radius: var(--radius-sm);
+  font-size: .82rem; line-height: 1.55;
+  display: flex; gap: .5rem; align-items: flex-start;
+}
+.reasoning-label { color: var(--accent); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.reasoning-text  { color: var(--text-muted); }
+
+.red-flags-box {
+  margin: .5rem 1.5rem 0;
+  padding: .6rem .85rem;
+  background: var(--red-bg);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: var(--radius-sm); font-size: .82rem;
+}
+.red-flags-label { color: var(--red); font-weight: 600; display: block; margin-bottom: .3rem; }
+.red-flags-list  { list-style: none; display: flex; flex-direction: column; gap: .2rem; }
+.red-flags-list li { color: var(--text-muted); padding-left: .75rem; position: relative; }
+.red-flags-list li::before { content: '•'; position: absolute; left: 0; color: var(--red); }
+
+.proposal-text-wrapper { margin-bottom: .75rem; }
+.edit-textarea {
+  width: 100%; background: var(--bg-input);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm); color: var(--text);
+  padding: .75rem; font-size: .875rem; font-family: inherit;
+  line-height: 1.7; resize: vertical; outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.edit-actions { display: flex; gap: .5rem; margin-top: .5rem; flex-wrap: wrap; }
+
+.proposal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
+.proposal-meta { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.proposal-company { font-size: .8rem; color: var(--text-muted); font-weight: 500; }
+.score-badge {
+  background: var(--accent-glow); color: var(--accent);
+  border: 1px solid var(--accent); padding: .1rem .5rem;
+  border-radius: 20px; font-size: .75rem; font-weight: 600;
+}
+.score-approved { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.status-pill { padding: .15rem .6rem; border-radius: 20px; font-size: .75rem; font-weight: 600; }
+.status-pill.approved { background: var(--green-bg); color: var(--green); }
+.proposal-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+.proposal-details-row { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+.detail-chip {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 20px; padding: .15rem .6rem; font-size: .78rem; color: var(--text-muted);
+}
+.proposal-body { padding: 1.25rem 1.5rem; }
+.proposal-text { font-size: .875rem; color: var(--text-muted); line-height: 1.7; white-space: pre-line; }
+.proposal-text-block { margin-bottom: 1rem; }
+.proposal-label {
+  font-size: .78rem; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem;
+}
+.skills-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+.skill-tag {
+  background: var(--bg-input); border: 1px solid var(--border);
+  padding: .15rem .55rem; border-radius: var(--radius-sm);
+  font-size: .75rem; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);
+}
+.job-link { display: inline-block; margin-top: .75rem; color: var(--accent); font-size: .85rem; text-decoration: none; }
+.job-link:hover { text-decoration: underline; }
+.proposal-actions {
+  padding: 1rem 1.5rem; border-top: 1px solid var(--border);
+  display: flex; gap: .5rem; flex-wrap: wrap; background: rgba(0,0,0,.15);
+}
+
+.decisions-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.decision-chip {
+  display: flex; align-items: center; gap: .4rem;
+  padding: .35rem .75rem; border-radius: 20px; border: 1px solid; font-size: .8rem;
+}
+.decision-chip.approved { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.decision-chip.rejected { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+.decision-icon { font-weight: 700; }
+.decision-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 3.5rem 1rem; text-align: center;
+  background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius);
+}
+.empty-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+.empty-text  { color: var(--text-muted); font-size: .9rem; margin-bottom: 1rem; }
+
+.login-wrapper {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem;
+}
+.login-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 2.5rem; width: 100%; max-width: 400px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+.login-header { text-align: center; margin-bottom: 2rem; }
+.login-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+.login-title { font-size: 1.4rem; font-weight: 700; margin-bottom: .3rem; }
+.login-subtitle { color: var(--text-muted); font-size: .875rem; }
+.login-form { display: flex; flex-direction: column; gap: 1.25rem; }
+.login-hint { text-align: center; margin-top: 1.25rem; font-size: .78rem; color: var(--text-dim); }
+.login-hint code {
+  background: var(--bg-input); padding: .1rem .3rem;
+  border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: .78rem;
+}
+
+.smtp-notice {
+  display: flex; align-items: flex-start; gap: .75rem;
+  padding: .85rem 1.1rem; border-radius: var(--radius-sm);
+  background: rgba(245,158,11,0.1); border: 1px solid var(--amber);
+  color: var(--text-muted); font-size: .85rem; margin-bottom: 1.5rem;
+}
+.smtp-notice-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+.smtp-notice code {
+  background: var(--bg-input); padding: .1rem .35rem;
+  border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem; color: var(--amber);
+}
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.modal-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); width: 100%; max-width: 460px;
+  box-shadow: 0 12px 48px rgba(0,0,0,.6); animation: modal-in .18s ease;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 1rem; font-weight: 600; }
+.modal-close {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 1.3rem; line-height: 1; padding: .1rem .25rem;
+  border-radius: var(--radius-sm); transition: color .15s, background .15s;
+}
+.modal-close:hover { background: var(--bg-input); color: var(--text); }
+.modal-body { padding: 1.4rem; display: flex; flex-direction: column; gap: 1rem; }
+.modal-subtitle { font-size: .85rem; color: var(--text-muted); }
+.modal-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: .5rem; }
+
+.field-hint  { font-size: .78rem; color: var(--text-dim); margin-top: .2rem; }
+.field-error { font-size: .8rem; color: var(--red); margin-top: .2rem; }
+
+@media (max-width: 900px) {
+  .analytics-strip { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 640px) {
+  .main-content { padding: 1rem; }
+  .page-header { flex-direction: column; }
+  .run-form-row { flex-direction: column; }
+  .btn-run { width: 100%; }
+  .navbar { padding: 0 1rem; }
+  .agent-pipeline { gap: .5rem; }
+  .pipeline-arrow { font-size: .9rem; }
+  .analytics-strip { grid-template-columns: repeat(2, 1fr); }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; }
+  .intelligence-row { padding: .65rem 1rem; }
+  .reasoning-box { margin: .65rem 1rem 0; }
+  .red-flags-box { margin: .5rem 1rem 0; }
+}
