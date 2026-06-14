@@ -20,9 +20,22 @@ def get_conn():
 def init_db():
     with get_conn() as conn:
         with conn.cursor() as cur:
+            # Users table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    tier TEXT NOT NULL DEFAULT 'free',
+                    is_active BOOLEAN NOT NULL DEFAULT true
+                )
+            """)
+            # Proposals table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS proposals (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT REFERENCES users(id),
                     status TEXT NOT NULL DEFAULT 'pending',
                     created_at TEXT,
                     reviewed_at TEXT,
@@ -46,8 +59,18 @@ def init_db():
                     previous_versions TEXT DEFAULT '[]'
                 )
             """)
-            # Add new columns if upgrading from old schema
+            # Indexes
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_proposals_user_id
+                ON proposals(user_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_proposals_user_status
+                ON proposals(user_id, status)
+            """)
+            # Add missing columns for existing deployments
             new_columns = [
+                ("user_id", "TEXT REFERENCES users(id)"),
                 ("recommendation", "TEXT DEFAULT 'Apply'"),
                 ("win_probability", "INTEGER DEFAULT 0"),
                 ("competition_level", "TEXT DEFAULT 'Unknown'"),
@@ -60,9 +83,20 @@ def init_db():
             ]
             for col_name, col_def in new_columns:
                 try:
-                    cur.execute(f"ALTER TABLE proposals ADD COLUMN {col_name} {col_def}")
+                    cur.execute(
+                        f"ALTER TABLE proposals ADD COLUMN {col_name} {col_def}"
+                    )
                 except psycopg2.errors.DuplicateColumn:
                     conn.rollback()
+
+
+def _parse_json_fields(d: dict) -> dict:
+    for field in ["key_skills_highlighted", "red_flags", "previous_versions"]:
+        try:
+            d[field] = json.loads(d.get(field) or "[]")
+        except (json.JSONDecodeError, TypeError):
+            d[field] = []
+    return d
 
 
 def insert_proposals(proposals: list):
@@ -71,12 +105,13 @@ def insert_proposals(proposals: list):
             for p in proposals:
                 cur.execute("""
                     INSERT INTO proposals
-                    (id, status, created_at, reviewed_at, keywords, job_title, company,
-                     job_url, job_score, proposal_text, timeline, price_range,
-                     key_skills_highlighted, recommendation, win_probability,
-                     competition_level, skill_match_score, opportunity_tier,
-                     reasoning, red_flags, proposal_version, previous_versions)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    (id, user_id, status, created_at, reviewed_at, keywords,
+                     job_title, company, job_url, job_score, proposal_text,
+                     timeline, price_range, key_skills_highlighted,
+                     recommendation, win_probability, competition_level,
+                     skill_match_score, opportunity_tier, reasoning,
+                     red_flags, proposal_version, previous_versions)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (id) DO UPDATE SET
                         status = EXCLUDED.status,
                         job_title = EXCLUDED.job_title,
@@ -95,10 +130,11 @@ def insert_proposals(proposals: list):
                         reasoning = EXCLUDED.reasoning,
                         red_flags = EXCLUDED.red_flags
                 """, (
-                    p["id"], p.get("status", "pending"), p.get("created_at"),
-                    p.get("reviewed_at"), p.get("keywords"), p.get("job_title"),
-                    p.get("company"), p.get("job_url"), p.get("job_score"),
-                    p.get("proposal_text"), p.get("timeline"), p.get("price_range"),
+                    p["id"], p.get("user_id"), p.get("status", "pending"),
+                    p.get("created_at"), p.get("reviewed_at"),
+                    p.get("keywords"), p.get("job_title"), p.get("company"),
+                    p.get("job_url"), p.get("job_score"), p.get("proposal_text"),
+                    p.get("timeline"), p.get("price_range"),
                     json.dumps(p.get("key_skills_highlighted", [])),
                     p.get("recommendation", "Apply"),
                     p.get("win_probability", 0),
@@ -112,137 +148,145 @@ def insert_proposals(proposals: list):
                 ))
 
 
-def get_proposals(status: str = None) -> list:
+def get_proposals(status: str = None, user_id: str = None) -> list:
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            if status:
+            if user_id and status:
+                cur.execute(
+                    "SELECT * FROM proposals WHERE user_id = %s AND status = %s ORDER BY created_at DESC",
+                    (user_id, status)
+                )
+            elif user_id:
+                cur.execute(
+                    "SELECT * FROM proposals WHERE user_id = %s ORDER BY created_at DESC",
+                    (user_id,)
+                )
+            elif status:
                 cur.execute(
                     "SELECT * FROM proposals WHERE status = %s ORDER BY created_at DESC",
                     (status,)
                 )
             else:
                 cur.execute("SELECT * FROM proposals ORDER BY created_at DESC")
-            rows = cur.fetchall()
-            result = []
-            for r in rows:
-                d = dict(r)
-                for json_field in ["key_skills_highlighted", "red_flags", "previous_versions"]:
-                    try:
-                        d[json_field] = json.loads(d.get(json_field) or "[]")
-                    except (json.JSONDecodeError, TypeError):
-                        d[json_field] = []
-                result.append(d)
-            return result
+            return [_parse_json_fields(dict(r)) for r in cur.fetchall()]
 
 
-def get_proposal_by_id(proposal_id: str):
+def get_proposal_by_id(proposal_id: str, user_id: str = None):
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM proposals WHERE id = %s", (proposal_id,))
+            if user_id:
+                cur.execute(
+                    "SELECT * FROM proposals WHERE id = %s AND user_id = %s",
+                    (proposal_id, user_id)
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM proposals WHERE id = %s", (proposal_id,)
+                )
             row = cur.fetchone()
-            if row:
-                d = dict(row)
-                for json_field in ["key_skills_highlighted", "red_flags", "previous_versions"]:
-                    try:
-                        d[json_field] = json.loads(d.get(json_field) or "[]")
-                    except (json.JSONDecodeError, TypeError):
-                        d[json_field] = []
-                return d
-            return None
+            return _parse_json_fields(dict(row)) if row else None
 
 
-def update_status(proposal_id: str, status: str, reviewed_at: str) -> bool:
+def update_status(proposal_id: str, status: str, reviewed_at: str,
+                  user_id: str = None) -> bool:
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE proposals SET status = %s, reviewed_at = %s WHERE id = ?",
-                (status, reviewed_at, proposal_id)
-            )
+            if user_id:
+                cur.execute(
+                    "UPDATE proposals SET status = %s, reviewed_at = %s WHERE id = %s AND user_id = %s",
+                    (status, reviewed_at, proposal_id, user_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE proposals SET status = %s, reviewed_at = %s WHERE id = %s",
+                    (status, reviewed_at, proposal_id)
+                )
             return cur.rowcount > 0
 
 
-def update_proposal_text(proposal_id: str, new_text: str) -> bool:
+def update_proposal_text(proposal_id: str, new_text: str,
+                         user_id: str = None) -> bool:
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # Save current version to history first
-            cur.execute(
-                "SELECT proposal_text, proposal_version, previous_versions FROM proposals WHERE id = %s",
-                (proposal_id,)
-            )
+            query = "SELECT proposal_text, proposal_version, previous_versions FROM proposals WHERE id = %s"
+            params = [proposal_id]
+            if user_id:
+                query += " AND user_id = %s"
+                params.append(user_id)
+            cur.execute(query, params)
             row = cur.fetchone()
             if not row:
                 return False
-            current_text, version, prev_versions_raw = row
+            current_text, version, prev_raw = row
             try:
-                prev_versions = json.loads(prev_versions_raw or "[]")
+                prev_versions = json.loads(prev_raw or "[]")
             except (json.JSONDecodeError, TypeError):
                 prev_versions = []
-            prev_versions.append({
-                "version": version,
-                "text": current_text,
-            })
-            cur.execute(
-                """UPDATE proposals SET
+            prev_versions.append({"version": version, "text": current_text})
+            update_query = """
+                UPDATE proposals SET
                     proposal_text = %s,
                     proposal_version = %s,
                     previous_versions = %s
-                WHERE id = %s""",
-                (new_text, version + 1, json.dumps(prev_versions), proposal_id)
-            )
+                WHERE id = %s
+            """
+            update_params = [new_text, version + 1, json.dumps(prev_versions), proposal_id]
+            if user_id:
+                update_query += " AND user_id = %s"
+                update_params.append(user_id)
+            cur.execute(update_query, update_params)
             return cur.rowcount > 0
 
 
-def delete_proposal_by_id(proposal_id: str) -> None:
+def delete_proposal_by_id(proposal_id: str, user_id: str = None) -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM proposals WHERE id = %s", (proposal_id,))
+            if user_id:
+                cur.execute(
+                    "DELETE FROM proposals WHERE id = %s AND user_id = %s",
+                    (proposal_id, user_id)
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM proposals WHERE id = %s", (proposal_id,)
+                )
 
 
-def get_analytics() -> dict:
+def get_analytics(user_id: str = None) -> dict:
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT COUNT(*) as total FROM proposals")
-            total = cur.fetchone()["total"]
+            uid_filter = "WHERE user_id = %s" if user_id else ""
+            params = (user_id,) if user_id else ()
 
-            cur.execute("SELECT COUNT(*) as c FROM proposals WHERE status = 'approved'")
-            approved = cur.fetchone()["c"]
+            def count(extra=""):
+                cur.execute(
+                    f"SELECT COUNT(*) as c FROM proposals {uid_filter} {extra}",
+                    params
+                )
+                return cur.fetchone()["c"]
 
-            cur.execute("SELECT COUNT(*) as c FROM proposals WHERE status = 'rejected'")
-            rejected = cur.fetchone()["c"]
+            total    = count()
+            approved = count("AND status = 'approved'" if user_id else "WHERE status = 'approved'")
+            rejected = count("AND status = 'rejected'" if user_id else "WHERE status = 'rejected'")
+            pending  = count("AND status = 'pending'"  if user_id else "WHERE status = 'pending'")
+            high     = count("AND job_score >= 80"     if user_id else "WHERE job_score >= 80")
+            medium   = count("AND job_score >= 60 AND job_score < 80" if user_id else "WHERE job_score >= 60 AND job_score < 80")
+            low      = count("AND job_score < 60"      if user_id else "WHERE job_score < 60")
+            hv       = count("AND opportunity_tier = 'High Value'" if user_id else "WHERE opportunity_tier = 'High Value'")
 
-            cur.execute("SELECT COUNT(*) as c FROM proposals WHERE status = 'pending'")
-            pending = cur.fetchone()["c"]
-
-            cur.execute("SELECT COUNT(*) as c FROM proposals WHERE job_score >= 80")
-            high_match = cur.fetchone()["c"]
-
-            cur.execute(
-                "SELECT COUNT(*) as c FROM proposals WHERE job_score >= 60 AND job_score < 80"
-            )
-            medium_match = cur.fetchone()["c"]
-
-            cur.execute("SELECT COUNT(*) as c FROM proposals WHERE job_score < 60")
-            low_match = cur.fetchone()["c"]
-
-            cur.execute("SELECT AVG(win_probability) as avg FROM proposals WHERE recommendation = 'Apply'")
+            win_q = f"SELECT AVG(win_probability) as avg FROM proposals {uid_filter} {'AND' if user_id else 'WHERE'} recommendation = 'Apply'"
+            cur.execute(win_q, params)
             avg_win = cur.fetchone()["avg"] or 0
-
-            cur.execute(
-                "SELECT COUNT(*) as c FROM proposals WHERE opportunity_tier = 'High Value'"
-            )
-            high_value = cur.fetchone()["c"]
-
-            approval_rate = round((approved / total * 100), 1) if total > 0 else 0
 
             return {
                 "total": total,
                 "approved": approved,
                 "rejected": rejected,
                 "pending": pending,
-                "high_match": high_match,
-                "medium_match": medium_match,
-                "low_match": low_match,
+                "high_match": high,
+                "medium_match": medium,
+                "low_match": low,
                 "avg_win_probability": round(avg_win, 1),
-                "high_value_opportunities": high_value,
-                "approval_rate": approval_rate,
+                "high_value_opportunities": hv,
+                "approval_rate": round(approved / total * 100, 1) if total > 0 else 0,
             }
