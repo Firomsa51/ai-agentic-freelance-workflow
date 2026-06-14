@@ -14,6 +14,40 @@
   </div>
 </div>
 
+<!-- Analytics Strip -->
+{% if analytics %}
+<div class="analytics-strip">
+  <div class="analytics-card">
+    <span class="analytics-value">{{ analytics.total }}</span>
+    <span class="analytics-label">Total Jobs</span>
+  </div>
+  <div class="analytics-card highlight-green">
+    <span class="analytics-value">{{ analytics.high_match }}</span>
+    <span class="analytics-label">High Match</span>
+  </div>
+  <div class="analytics-card highlight-yellow">
+    <span class="analytics-value">{{ analytics.medium_match }}</span>
+    <span class="analytics-label">Medium Match</span>
+  </div>
+  <div class="analytics-card highlight-red">
+    <span class="analytics-value">{{ analytics.low_match }}</span>
+    <span class="analytics-label">Low Match</span>
+  </div>
+  <div class="analytics-card highlight-blue">
+    <span class="analytics-value">{{ analytics.approval_rate }}%</span>
+    <span class="analytics-label">Approval Rate</span>
+  </div>
+  <div class="analytics-card highlight-purple">
+    <span class="analytics-value">{{ analytics.avg_win_probability }}%</span>
+    <span class="analytics-label">Avg Win Rate</span>
+  </div>
+  <div class="analytics-card highlight-gold">
+    <span class="analytics-value">{{ analytics.high_value_opportunities }}</span>
+    <span class="analytics-label">High Value</span>
+  </div>
+</div>
+{% endif %}
+
 <!-- Run Panel -->
 <div class="card run-card">
   <div class="card-header">
@@ -37,6 +71,12 @@
         <div class="agent-avatar analyst">📊</div>
         <span class="agent-name">Analyst</span>
         <span class="agent-role">Scores & Ranks</span>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="agent-node">
+        <div class="agent-avatar strategist">🎯</div>
+        <span class="agent-name">Strategist</span>
+        <span class="agent-role">Apply/Skip</span>
       </div>
       <div class="pipeline-arrow">→</div>
       <div class="agent-node">
@@ -95,7 +135,16 @@
   {% if pending %}
     <div class="proposals-grid">
       {% for proposal in pending %}
-      <div class="proposal-card pending">
+      <div class="proposal-card pending {% if proposal.opportunity_tier == 'High Value' %}card-high-value{% endif %}">
+
+        <!-- Opportunity Tier Banner -->
+        {% if proposal.opportunity_tier and proposal.opportunity_tier != 'Unknown' %}
+        <div class="tier-banner tier-{{ proposal.opportunity_tier | lower | replace(' ', '-') }}">
+          {% if proposal.opportunity_tier == 'High Value' %}🔥{% elif proposal.opportunity_tier == 'Medium Value' %}⚡{% else %}💡{% endif %}
+          {{ proposal.opportunity_tier }}
+        </div>
+        {% endif %}
+
         <div class="proposal-header">
           <div class="proposal-meta">
             <span class="proposal-company">{{ proposal.company | default('Unknown') }}</span>
@@ -114,8 +163,75 @@
           {% endif %}
         </div>
 
+        <!-- Strategist Intelligence -->
+        {% if proposal.win_probability or proposal.competition_level %}
+        <div class="intelligence-row">
+          {% if proposal.recommendation %}
+          <span class="rec-badge rec-{{ proposal.recommendation | lower }}">
+            {{ '✓ Apply' if proposal.recommendation == 'Apply' else '✗ Skip' }}
+          </span>
+          {% endif %}
+          {% if proposal.win_probability %}
+          <span class="intel-chip">
+            🎯 Win: {{ proposal.win_probability }}%
+          </span>
+          {% endif %}
+          {% if proposal.competition_level %}
+          <span class="intel-chip competition-{{ proposal.competition_level | lower }}">
+            👥 {{ proposal.competition_level }} Competition
+          </span>
+          {% endif %}
+          {% if proposal.skill_match_score %}
+          <span class="intel-chip">
+            🧠 Skill Match: {{ proposal.skill_match_score }}%
+          </span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Strategist Reasoning -->
+        {% if proposal.reasoning %}
+        <div class="reasoning-box">
+          <span class="reasoning-label">💡 Strategy:</span>
+          <span class="reasoning-text">{{ proposal.reasoning }}</span>
+        </div>
+        {% endif %}
+
+        <!-- Red Flags -->
+        {% if proposal.red_flags and proposal.red_flags|length > 0 %}
+        <div class="red-flags-box">
+          <span class="red-flags-label">⚠️ Red Flags:</span>
+          <ul class="red-flags-list">
+            {% for flag in proposal.red_flags %}
+            <li>{{ flag }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         <div class="proposal-body">
-          <p class="proposal-text">{{ proposal.proposal_text | default('No proposal text.') }}</p>
+          <!-- Inline Edit Toggle -->
+          <div class="proposal-text-wrapper">
+            <p class="proposal-text" id="text-{{ proposal.id }}">
+              {{ proposal.proposal_text | default('No proposal text.') }}
+            </p>
+            <form method="POST"
+                  action="{{ url_for('edit_proposal', proposal_id=proposal.id) }}"
+                  class="edit-form"
+                  id="edit-form-{{ proposal.id }}"
+                  style="display:none">
+              <textarea name="proposal_text"
+                        class="edit-textarea"
+                        rows="8">{{ proposal.proposal_text | default('') }}</textarea>
+              <div class="edit-actions">
+                <button type="submit" class="btn btn-save">💾 Save</button>
+                <button type="button"
+                        class="btn btn-cancel"
+                        onclick="cancelEdit('{{ proposal.id }}')">Cancel</button>
+              </div>
+            </form>
+          </div>
+
           {% if proposal.key_skills_highlighted %}
           <div class="skills-row">
             {% for skill in proposal.key_skills_highlighted[:5] %}
@@ -123,22 +239,39 @@
             {% endfor %}
           </div>
           {% endif %}
+
           {% if proposal.job_url and proposal.job_url != '#' %}
-          <a href="{{ proposal.job_url }}" target="_blank" rel="noopener noreferrer" class="job-link">
+          <a href="{{ proposal.job_url }}"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="job-link">
             View Original Job →
           </a>
           {% endif %}
         </div>
 
         <div class="proposal-actions">
-          <form method="POST" action="{{ url_for('approve_proposal', proposal_id=proposal.id) }}" style="display:inline">
+          <form method="POST"
+                action="{{ url_for('approve_proposal', proposal_id=proposal.id) }}"
+                style="display:inline">
             <button type="submit" class="btn btn-approve">✓ Approve</button>
           </form>
-          <form method="POST" action="{{ url_for('reject_proposal', proposal_id=proposal.id) }}" style="display:inline">
+          <form method="POST"
+                action="{{ url_for('reject_proposal', proposal_id=proposal.id) }}"
+                style="display:inline">
             <button type="submit" class="btn btn-reject">✗ Reject</button>
           </form>
-          <form method="POST" action="{{ url_for('delete_proposal', proposal_id=proposal.id) }}" style="display:inline">
-            <button type="submit" class="btn btn-delete" onclick="return confirm('Delete this proposal?')">🗑</button>
+          <button type="button"
+                  class="btn btn-edit"
+                  onclick="toggleEdit('{{ proposal.id }}')">
+            ✏️ Edit
+          </button>
+          <form method="POST"
+                action="{{ url_for('delete_proposal', proposal_id=proposal.id) }}"
+                style="display:inline">
+            <button type="submit"
+                    class="btn btn-delete"
+                    onclick="return confirm('Delete this proposal?')">🗑</button>
           </form>
         </div>
       </div>
@@ -152,7 +285,7 @@
   {% endif %}
 </section>
 
-<!-- Recent Approved/Rejected Summary -->
+<!-- Recent Decisions -->
 {% if approved or rejected %}
 <section class="proposals-section">
   <h2 class="section-title">
@@ -175,6 +308,19 @@
 
 {% block scripts %}
 <script>
+  function toggleEdit(id) {
+    const textEl = document.getElementById('text-' + id);
+    const formEl = document.getElementById('edit-form-' + id);
+    const isHidden = formEl.style.display === 'none';
+    textEl.style.display = isHidden ? 'none' : 'block';
+    formEl.style.display = isHidden ? 'block' : 'none';
+  }
+
+  function cancelEdit(id) {
+    document.getElementById('text-' + id).style.display = 'block';
+    document.getElementById('edit-form-' + id).style.display = 'none';
+  }
+
   {% if crew_status.running %}
   (function poll() {
     setTimeout(function() {
