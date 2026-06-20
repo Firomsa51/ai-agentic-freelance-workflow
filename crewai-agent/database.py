@@ -59,6 +59,19 @@ def init_db():
                     previous_versions TEXT DEFAULT '[]'
                 )
             """)
+            # Resume generations table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS resume_generations (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT REFERENCES users(id),
+                    created_at TEXT NOT NULL,
+                    input_text TEXT NOT NULL,
+                    target_role TEXT,
+                    output_text TEXT,
+                    ats_score INTEGER DEFAULT 0,
+                    improvements TEXT DEFAULT '[]'
+                )
+            """)
             # Indexes
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_proposals_user_id
@@ -67,6 +80,10 @@ def init_db():
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_proposals_user_status
                 ON proposals(user_id, status)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_resume_user_id
+                ON resume_generations(user_id)
             """)
             # Add missing columns for existing deployments
             new_columns = [
@@ -290,3 +307,61 @@ def get_analytics(user_id: str = None) -> dict:
                 "high_value_opportunities": hv,
                 "approval_rate": round(approved / total * 100, 1) if total > 0 else 0,
             }
+
+
+def insert_resume_generation(record: dict) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO resume_generations
+                (id, user_id, created_at, input_text, target_role,
+                 output_text, ats_score, improvements)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                record["id"], record.get("user_id"), record.get("created_at"),
+                record.get("input_text"), record.get("target_role"),
+                record.get("output_text"), record.get("ats_score", 0),
+                json.dumps(record.get("improvements", [])),
+            ))
+
+
+def get_resume_generations(user_id: str) -> list:
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM resume_generations WHERE user_id = %s ORDER BY created_at DESC",
+                (user_id,)
+            )
+            result = []
+            for r in cur.fetchall():
+                d = dict(r)
+                try:
+                    d["improvements"] = json.loads(d.get("improvements") or "[]")
+                except (json.JSONDecodeError, TypeError):
+                    d["improvements"] = []
+                result.append(d)
+            return result
+
+
+def get_resume_generation_by_id(generation_id: str, user_id: str = None):
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if user_id:
+                cur.execute(
+                    "SELECT * FROM resume_generations WHERE id = %s AND user_id = %s",
+                    (generation_id, user_id)
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM resume_generations WHERE id = %s",
+                    (generation_id,)
+                )
+            row = cur.fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            try:
+                d["improvements"] = json.loads(d.get("improvements") or "[]")
+            except (json.JSONDecodeError, TypeError):
+                d["improvements"] = []
+            return d
