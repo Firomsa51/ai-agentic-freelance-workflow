@@ -21,7 +21,8 @@ from email_sender import send_proposal_email, is_smtp_configured
 from email_sender import validate_email_address
 from database import (
     init_db, insert_proposals, get_proposals, get_proposal_by_id,
-    update_status, delete_proposal_by_id, update_proposal_text, get_analytics
+    update_status, delete_proposal_by_id, update_proposal_text, get_analytics,
+    insert_resume_generation, get_resume_generations, get_resume_generation_by_id
 )
 from auth import api_login_required, ensure_user_exists
 
@@ -364,6 +365,78 @@ def api_crew_status():
 @api_login_required
 def api_analytics():
     return jsonify(get_analytics(user_id=g.user_id))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESUME AGENT API ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/v1/resume/generate", methods=["POST"])
+@api_login_required
+def api_generate_resume():
+    """Generate an optimized resume for the authenticated user."""
+    ensure_user_exists(g.user_id, g.user_email)
+    data = request.get_json(silent=True) or {}
+    raw_input_text = data.get("input_text", "")
+    raw_target_role = data.get("target_role", "")
+
+    try:
+        input_text = sanitize_input(str(raw_input_text), max_length=1500)
+    except ValueError:
+        return jsonify({"error": "Invalid input_text — remove special characters or shorten it."}), 400
+
+    if not input_text.strip():
+        return jsonify({"error": "input_text is required"}), 400
+
+    try:
+        target_role = sanitize_input(str(raw_target_role), max_length=120)
+    except ValueError:
+        target_role = ""
+
+    from crew.resume_crew import run_resume_crew
+    result = run_resume_crew(input_text, target_role)
+
+    if not result.get("success"):
+        return jsonify({"error": result.get("error", "Resume generation failed")}), 500
+
+    record_id = str(uuid.uuid4())
+    record = {
+        "id": record_id,
+        "user_id": g.user_id,
+        "created_at": datetime.utcnow().isoformat(),
+        "input_text": input_text,
+        "target_role": target_role,
+        "output_text": result.get("optimized_text", ""),
+        "ats_score": result.get("ats_score", 0),
+        "improvements": result.get("improvements", []),
+    }
+    insert_resume_generation(record)
+    logger.info(f"Resume generated — user:{g.user_id} id:{record_id}")
+
+    return jsonify({
+        "id": record_id,
+        "optimized_text": result.get("optimized_text", ""),
+        "ats_score": result.get("ats_score", 0),
+        "improvements": result.get("improvements", []),
+    })
+
+
+@app.route("/api/v1/resume/history", methods=["GET"])
+@api_login_required
+def api_resume_history():
+    """List past resume generations for the authenticated user."""
+    generations = get_resume_generations(g.user_id)
+    return jsonify({"generations": generations, "total": len(generations)})
+
+
+@app.route("/api/v1/resume/<generation_id>", methods=["GET"])
+@api_login_required
+def api_get_resume_generation(generation_id: str):
+    """Fetch a single resume generation by ID for the authenticated user."""
+    generation = get_resume_generation_by_id(generation_id, user_id=g.user_id)
+    if not generation:
+        return jsonify({"error": "Resume generation not found"}), 404
+    return jsonify(generation)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
